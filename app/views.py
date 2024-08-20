@@ -7,7 +7,8 @@ from app.models import Store, Staff, Booking
 from django.views.decorators.http import require_POST
 from app.forms import BookingForm
 from django.contrib.auth.mixins import LoginRequiredMixin
-
+from django.contrib.auth.decorators import login_required
+from django.http import Http404
 
 class StoreView(View):
     def get(self, request, *args, **kwargs):
@@ -20,7 +21,6 @@ class StoreView(View):
             return redirect('mypage', start_date.year, start_date.month, start_date.day)
 
         store_data = Store.objects.all()
-
         return render(request, 'app/store.html', {
             'store_data': store_data,
         })
@@ -30,7 +30,6 @@ class StaffView(View):
     def get(self, request, *args, **kwargs):
         store_data = get_object_or_404(Store, id=self.kwargs['pk'])
         staff_data = Staff.objects.filter(store=store_data).select_related('user')
-
         return render(request, 'app/staff.html', {
             'store_data': store_data,
             'staff_data': staff_data,
@@ -39,7 +38,10 @@ class StaffView(View):
 
 class CalendarView(View):
     def get(self, request, *args, **kwargs):
-        staff_data = Staff.objects.filter(id=self.kwargs['pk']).select_related('user').select_related('store')[0]
+        staff_data = Staff.objects.filter(id=self.kwargs['pk']).select_related('user').select_related('store').first()
+        if not staff_data:
+            raise Http404("Staff not found")
+        
         today = date.today()
         year = self.kwargs.get('year')
         month = self.kwargs.get('month')
@@ -85,7 +87,10 @@ class CalendarView(View):
 
 class BookingView(View):
     def get(self, request, *args, **kwargs):
-        staff_data = Staff.objects.filter(id=self.kwargs['pk']).select_related('user').select_related('store')[0]
+        staff_data = Staff.objects.filter(id=self.kwargs['pk']).select_related('user').select_related('store').first()
+        if not staff_data:
+            raise Http404("Staff not found")
+
         year = self.kwargs.get('year')
         month = self.kwargs.get('month')
         day = self.kwargs.get('day')
@@ -135,13 +140,17 @@ class BookingView(View):
             'form': form,
         })
 
+
 class ThanksView(TemplateView):
     template_name = 'app/thanks.html'
 
 
 class MyPageView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
-        staff_data = Staff.objects.filter(id=request.user.id).select_related('user').select_related('store')[0]
+        staff_data = Staff.objects.filter(id=request.user.id).select_related('user').select_related('store').first()
+        if not staff_data:
+            raise Http404("Staff not found")
+
         year = self.kwargs.get('year')
         month = self.kwargs.get('month')
         day = self.kwargs.get('day')
@@ -183,8 +192,9 @@ class MyPageView(LoginRequiredMixin, View):
 
 
 @require_POST
+@login_required
 def Holiday(request, year, month, day, hour):
-    staff_data = Staff.objects.get(id=request.user.id)
+    staff_data = get_object_or_404(Staff, id=request.user.id)
     start_time = make_aware(datetime(year=year, month=month, day=day, hour=hour))
     end_time = make_aware(datetime(year=year, month=month, day=day, hour=hour + 1))
 
@@ -204,6 +214,7 @@ def Holiday(request, year, month, day, hour):
 
 
 @require_POST
+@login_required
 def Delete(request, year, month, day, hour):
     start_time = make_aware(datetime(year=year, month=month, day=day, hour=hour))
     booking_data = Booking.objects.filter(start=start_time)
